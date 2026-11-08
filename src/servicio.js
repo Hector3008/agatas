@@ -20,7 +20,11 @@ export function crearServicio({ core, Config }) {
 
   function exigir(actor, permiso) {
     if (!actor || !permite(actor.permisos ?? [], permiso)) {
-      throw new ErrorAgatas("PERMISO_INSUFICIENTE", "Permiso insuficiente", 403);
+      throw new ErrorAgatas(
+        "PERMISO_INSUFICIENTE",
+        "Permiso insuficiente",
+        403,
+      );
     }
   }
 
@@ -41,16 +45,21 @@ export function crearServicio({ core, Config }) {
       exigir(actor, PERMISOS.configurar);
       const guardada = await cargar(empresaId);
       const config = guardada ?? structuredClone(CONFIG_POR_DEFECTO);
-      return { config, guardada: Boolean(guardada), sinPregunta: faltantes(config) };
+      return {
+        config,
+        guardada: Boolean(guardada),
+        sinPregunta: faltantes(config),
+      };
     },
 
     async guardar({ empresaId, actor, cambios }) {
       exigir(actor, PERMISOS.configurar);
-      const actual = (await cargar(empresaId)) ?? structuredClone(CONFIG_POR_DEFECTO);
+      const actual =
+        (await cargar(empresaId)) ?? structuredClone(CONFIG_POR_DEFECTO);
       const config = aplicarCambios(actual, cambios);
       await conEmpresa(empresaId, async () => {
         await Config.updateOne(
-          {},
+          { clave: "config" },
           { $set: { config, actualizadoPor: actor.usuarioId ?? null } },
           { upsert: true },
         );
