@@ -12,6 +12,15 @@ export const LIMITES = Object.freeze({
   nombreMax: 40,
 });
 
+// Rangos de las reglas del juego (`config.reglas`).
+export const LIMITES_REGLAS = Object.freeze({
+  partidasPorIpHora: [1, 1000],
+  intercambiosPorHora: [1, 200],
+  ofertaVenceSeg: [30, 3600],
+  reservaVenceSeg: [60, 7200],
+  cookieDias: [1, 365],
+});
+
 export const CONFIG_POR_DEFECTO = Object.freeze({
   personaje: { singular: "agata", plural: "agatas" },
   colores: [
@@ -32,6 +41,14 @@ export const CONFIG_POR_DEFECTO = Object.freeze({
   ],
   preguntas: {},
   textos: { instrucciones: "", reglas: "" },
+  // Reglas del juego (5.80). Los topes de IP son generosos: en un café todos comparten el WiFi.
+  reglas: {
+    partidasPorIpHora: 30, // partidas nuevas por IP y hora
+    intercambiosPorHora: 12, // propuestas + aceptaciones por jugador y hora
+    ofertaVenceSeg: 180, // una oferta sin pareja se cae a los 3 minutos
+    reservaVenceSeg: 900, // aceptado pero sin confirmar por los dos: se cae a los 15 minutos
+    cookieDias: 30, // duración de la cookie de partida
+  },
 });
 
 export class ErrorConfig extends Error {
@@ -95,7 +112,7 @@ export function validarConfig(entrada) {
   }
   const permitidas = new Set([
     "personaje", "colores", "agatasPorColor", "manoPorJugador",
-    "requiereCuenta", "premios", "preguntas", "textos",
+    "requiereCuenta", "premios", "preguntas", "textos", "reglas",
   ]);
   for (const k of Object.keys(entrada)) {
     if (!permitidas.has(k)) throw new ErrorConfig(`Campo desconocido: ${k}`, k);
@@ -185,7 +202,33 @@ export function validarConfig(entrada) {
     reglas: texto(tx.reglas ?? "", "textos.reglas", LIMITES.textoMax, { vacio: true }),
   };
 
-  return { personaje, colores, agatasPorColor, manoPorJugador, requiereCuenta: entrada.requiereCuenta, premios, preguntas, textos };
+  // Las configuraciones guardadas antes de 5.80 no traen `reglas`: se completan con los valores por defecto.
+  const rg = entrada.reglas ?? {};
+  if (typeof rg !== "object" || Array.isArray(rg)) throw new ErrorConfig("reglas: debe ser un objeto", "reglas");
+  for (const k of Object.keys(rg)) {
+    if (!(k in LIMITES_REGLAS)) throw new ErrorConfig(`reglas: campo desconocido «${k}»`, "reglas");
+  }
+  const reglas = {};
+  for (const [k, [min, max]] of Object.entries(LIMITES_REGLAS)) {
+    reglas[k] = entero(rg[k] ?? CONFIG_POR_DEFECTO.reglas[k], `reglas.${k}`, min, max);
+  }
+
+  return { personaje, colores, agatasPorColor, manoPorJugador, requiereCuenta: entrada.requiereCuenta, premios, preguntas, textos, reglas };
+}
+
+/** Avisos que no impiden guardar pero dejan el juego cojo (el admin debería verlos). */
+export function advertencias(config) {
+  const lista = [];
+  for (const p of config.premios) {
+    if (p.umbral > config.manoPorJugador) {
+      lista.push({
+        codigo: "PREMIO_INALCANZABLE",
+        premioId: p.id,
+        mensaje: `«${p.nombre}» pide ${p.umbral} colores distintos, pero la mano es de ${config.manoPorJugador}: nadie podrá ganarlo`,
+      });
+    }
+  }
+  return lista;
 }
 
 /** Une los cambios del admin sobre lo guardado (campo a campo) y valida el resultado. */
@@ -197,8 +240,9 @@ export function aplicarCambios(actual, cambios) {
   const base = JSON.parse(JSON.stringify(actual ?? CONFIG_POR_DEFECTO));
   const fusion = { ...base };
   for (const [k, v] of Object.entries(cambios)) {
-    if (k === "textos" && v && typeof v === "object") fusion.textos = { ...base.textos, ...v };
-    else if (k === "personaje" && v && typeof v === "object") fusion.personaje = { ...base.personaje, ...v };
+    if (k === "textos" && v && typeof v === "object" && !Array.isArray(v)) fusion.textos = { ...base.textos, ...v };
+    else if (k === "reglas" && v && typeof v === "object" && !Array.isArray(v)) fusion.reglas = { ...CONFIG_POR_DEFECTO.reglas, ...base.reglas, ...v };
+    else if (k === "personaje" && v && typeof v === "object" && !Array.isArray(v)) fusion.personaje = { ...base.personaje, ...v };
     else fusion[k] = v;
   }
   return validarConfig(fusion);
@@ -216,5 +260,7 @@ export function vistaPublica(config) {
     requiereCuenta: config.requiereCuenta,
     premios: config.premios.map(({ id, umbral, nombre, descripcion }) => ({ id, umbral, nombre, descripcion })),
     textos: config.textos,
+    // Tiempos que el front necesita para mostrar cuenta atrás
+    tiempos: { ofertaVenceSeg: config.reglas.ofertaVenceSeg, reservaVenceSeg: config.reglas.reservaVenceSeg },
   };
 }

@@ -1,6 +1,6 @@
-import { CONFIG_POR_DEFECTO, aplicarCambios, faltantes } from "./config.js";
+import { CONFIG_POR_DEFECTO, aplicarCambios, faltantes, advertencias, validarConfig } from "./config.js";
 import { PERMISOS } from "./roles.js";
-import { permite } from "core";
+import { conEmpresa, permite } from "core";
 
 export class ErrorAgatas extends Error {
   constructor(codigo, mensaje, status) {
@@ -16,8 +16,6 @@ export class ErrorAgatas extends Error {
  * y comprueba su permiso aunque la ruta no lo haga (como en 5.14 a 5.16).
  */
 export function crearServicio({ core, Config }) {
-  const { conEmpresa } = core;
-
   function exigir(actor, permiso) {
     if (!actor || !permite(actor.permisos ?? [], permiso)) {
       throw new ErrorAgatas(
@@ -38,17 +36,19 @@ export function crearServicio({ core, Config }) {
   return {
     /** Lectura interna (sin actor): la usará el juego en 5.80. Sin guardar, devuelve los valores por defecto. */
     async configDe({ empresaId }) {
-      return (await cargar(empresaId)) ?? structuredClone(CONFIG_POR_DEFECTO);
+      // validarConfig completa lo que falte (p. ej. `reglas` en configuraciones de 5.79)
+      return validarConfig((await cargar(empresaId)) ?? structuredClone(CONFIG_POR_DEFECTO));
     },
 
     async leer({ empresaId, actor }) {
       exigir(actor, PERMISOS.configurar);
       const guardada = await cargar(empresaId);
-      const config = guardada ?? structuredClone(CONFIG_POR_DEFECTO);
+      const config = validarConfig(guardada ?? structuredClone(CONFIG_POR_DEFECTO));
       return {
         config,
         guardada: Boolean(guardada),
         sinPregunta: faltantes(config),
+        advertencias: advertencias(config),
       };
     },
 
@@ -64,7 +64,7 @@ export function crearServicio({ core, Config }) {
           { upsert: true },
         );
       });
-      return { config, guardada: true, sinPregunta: faltantes(config) };
+      return { config, guardada: true, sinPregunta: faltantes(config), advertencias: advertencias(config) };
     },
   };
 }

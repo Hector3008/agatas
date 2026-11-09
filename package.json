@@ -1,6 +1,6 @@
 {
   "name": "agatas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Juego de intercambio de agatas de colores para Gecko Café (servicio de la plataforma Ilnapo)",
   "type": "module",
   "main": "src/index.js",

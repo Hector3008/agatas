@@ -111,3 +111,38 @@ test("tipos: prefijos propios y estados finales", () => {
     assert.ok(!["PD", "RC", "DOC_ITEM", "DP"].includes(t.prefijo));
   }
 });
+
+// ───────────── 5.80: reglas ─────────────
+import { advertencias, LIMITES_REGLAS } from "../src/config.js";
+
+test("una configuración guardada en 5.79 (sin reglas) se completa con las reglas por defecto", () => {
+  const vieja = base();
+  delete vieja.reglas;
+  const c = validarConfig(vieja);
+  assert.deepEqual(c.reglas, CONFIG_POR_DEFECTO.reglas);
+});
+
+test("las reglas se cambian de una en una y se validan", () => {
+  const c = aplicarCambios(base(), { reglas: { intercambiosPorHora: 3 } });
+  assert.equal(c.reglas.intercambiosPorHora, 3);
+  assert.equal(c.reglas.cookieDias, 30, "lo demás se conserva");
+  assert.throws(() => aplicarCambios(base(), { reglas: { intercambiosPorHora: 0 } }), ErrorConfig);
+  assert.throws(() => aplicarCambios(base(), { reglas: { ofertaVenceSeg: 5 } }), ErrorConfig);
+  assert.throws(() => aplicarCambios(base(), { reglas: { inventada: 1 } }), ErrorConfig);
+  assert.throws(() => aplicarCambios(base(), { reglas: [] }), ErrorConfig);
+  assert.deepEqual(Object.keys(LIMITES_REGLAS).sort(), Object.keys(CONFIG_POR_DEFECTO.reglas).sort());
+});
+
+test("avisa de los premios que nadie podrá ganar (umbral mayor que la mano)", () => {
+  assert.deepEqual(advertencias(validarConfig(base())), []);
+  const c = aplicarCambios(base(), { manoPorJugador: 4 });
+  assert.deepEqual(advertencias(c).map((a) => a.premioId), ["p5", "p6"]);
+});
+
+test("la vista pública no muestra preguntas ni reglas de antifraude, solo los tiempos", () => {
+  const c = aplicarCambios(base(), { preguntas: { "naranja-1": "¿?" } });
+  const v = vistaPublica(c);
+  assert.equal(v.preguntas, undefined);
+  assert.equal(v.reglas, undefined);
+  assert.deepEqual(v.tiempos, { ofertaVenceSeg: 180, reservaVenceSeg: 900 });
+});

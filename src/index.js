@@ -1,25 +1,20 @@
 import express from "express";
 import { TIPO_INTERCAMBIO, TIPO_PREMIO } from "./tipos.js";
-import { crearModeloConfig } from "./modelo.js";
+import { crearModelos } from "./modelo.js";
 import { crearServicio, ErrorAgatas } from "./servicio.js";
-import { ErrorConfig } from "./config.js";
+import { crearPartidas } from "./partidas.js";
+import { crearIntercambios } from "./intercambios.js";
+import { crearPremios } from "./premios.js";
+import { crearRouterPublico } from "./http-publico.js";
+import { crearRouterStaff } from "./http-staff.js";
+import { manejar, middlewareCsrf } from "./http.js";
 import { PERMISOS } from "./roles.js";
 
 export { TIPO_INTERCAMBIO, TIPO_PREMIO, MOTIVOS_CANCELACION } from "./tipos.js";
 export * from "./config.js";
 export { PERMISOS, PLANTILLA_ROLES } from "./roles.js";
 export { crearServicio, ErrorAgatas } from "./servicio.js";
-
-function responderError(res, error) {
-  if (error instanceof ErrorConfig || error instanceof ErrorAgatas) {
-    return res.status(error.status).json({ error: error.codigo, mensaje: error.message, campo: error.campo ?? undefined });
-  }
-  if (typeof error?.status === "number" && error.codigo) {
-    return res.status(error.status).json({ error: error.codigo, mensaje: error.message });
-  }
-  console.error("[agatas]", error);
-  return res.status(500).json({ error: "ERROR_INTERNO", mensaje: "Error inesperado" });
-}
+export { armarMano, coloresDistintos, estadoPremios } from "./juego.js";
 
 /**
  * createRouter({ core }): registra los tipos de documento, crea el modelo y
@@ -32,34 +27,30 @@ export function createRouter({ core } = {}) {
   core.documentos.registrarTipo(TIPO_INTERCAMBIO);
   core.documentos.registrarTipo(TIPO_PREMIO);
 
-  const Config = crearModeloConfig(core);
-  const servicio = crearServicio({ core, Config });
+  const M = crearModelos(core);
+  const servicio = crearServicio({ core, Config: M.Config });
+  const partidas = crearPartidas({ M, configDe: servicio.configDe });
+  const intercambios = crearIntercambios({ M, documentos: core.documentos, configDe: servicio.configDe, partidas });
+  const premios = crearPremios({ M, documentos: core.documentos, configDe: servicio.configDe });
 
   const router = express.Router();
   router.use(express.json());
 
   router.get("/estado", (_req, res) => {
-    res.json({ servicio: "agatas", version: "0.1.0", ok: true });
+    res.json({ servicio: "agatas", version: "0.2.0", ok: true });
   });
 
-  // Las escrituras exigen la cabecera anti-CSRF del núcleo. Si no está, se falla
-  // al arrancar en vez de dejar PUT /config sin protección.
-  const csrf = core.auth?.exigirCsrf;
-  if (typeof csrf !== "function") {
-    throw new Error("agatas necesita core.auth.exigirCsrf (actualiza el núcleo)");
-  }
+  // `exigirCsrf` del núcleo lanza en vez de llamar a next(): middlewareCsrf lo adapta.
+  const csrf = middlewareCsrf(core);
   const actorDe = (req) => ({ usuarioId: req.auth.usuarioId, permisos: req.rol?.permisos ?? [] });
 
   router.get(
     "/config",
     core.autenticar({ requiereEmpresa: true }),
     core.requierePermiso(PERMISOS.configurar),
-    async (req, res) => {
-      try {
-        res.set("Cache-Control", "no-store");
-        res.json(await servicio.leer({ empresaId: req.auth.empresaId, actor: actorDe(req) }));
-      } catch (e) { responderError(res, e); }
-    },
+    manejar(async (req, res) => {
+      res.json(await servicio.leer({ empresaId: req.auth.empresaId, actor: actorDe(req) }));
+    }),
   );
 
   router.put(
@@ -67,15 +58,18 @@ export function createRouter({ core } = {}) {
     core.autenticar({ requiereEmpresa: true }),
     csrf,
     core.requierePermiso(PERMISOS.configurar),
-    async (req, res) => {
-      try {
-        res.set("Cache-Control", "no-store");
-        res.json(await servicio.guardar({ empresaId: req.auth.empresaId, actor: actorDe(req), cambios: req.body }));
-      } catch (e) { responderError(res, e); }
-    },
+    manejar(async (req, res) => {
+      res.json(await servicio.guardar({ empresaId: req.auth.empresaId, actor: actorDe(req), cambios: req.body }));
+    }),
   );
 
+  router.use("/staff", crearRouterStaff({ core, premios }));
+  router.use("/p/:slug", crearRouterPublico({ core, servicio, partidas, intercambios, premios }));
+
+  // Índices únicos listos antes de atender (el gateway puede esperar a `router.listo`).
+  router.listo = Promise.all(Object.values(M).map((m) => m.init?.())).then(() => undefined);
   router.servicio = servicio;
+  router.juego = { partidas, intercambios, premios };
   return router;
 }
 
