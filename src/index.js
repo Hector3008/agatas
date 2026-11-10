@@ -7,6 +7,7 @@ import { crearIntercambios } from "./intercambios.js";
 import { crearPremios } from "./premios.js";
 import { crearRouterPublico } from "./http-publico.js";
 import { crearRouterStaff } from "./http-staff.js";
+import { crearFront } from "./front.js";
 import { manejar, middlewareCsrf } from "./http.js";
 import { PERMISOS } from "./roles.js";
 
@@ -20,7 +21,7 @@ export { armarMano, coloresDistintos, estadoPremios } from "./juego.js";
  * createRouter({ core }): registra los tipos de documento, crea el modelo y
  * devuelve el router de /agatas. No abre conexiones y trae su express.json().
  */
-export function createRouter({ core } = {}) {
+export function createRouter({ core, dist } = {}) {
   if (!core?.documentos || !core?.model || !core?.autenticar || !core?.requierePermiso) {
     throw new Error("agatas necesita el núcleo (core) con documentos, auth y permisos");
   }
@@ -37,7 +38,7 @@ export function createRouter({ core } = {}) {
   router.use(express.json());
 
   router.get("/estado", (_req, res) => {
-    res.json({ servicio: "agatas", version: "0.2.0", ok: true });
+    res.json({ servicio: "agatas", version: "0.3.0", ok: true });
   });
 
   // `exigirCsrf` del núcleo lanza en vez de llamar a next(): middlewareCsrf lo adapta.
@@ -64,6 +65,13 @@ export function createRouter({ core } = {}) {
   );
 
   router.use("/staff", crearRouterStaff({ core, premios }));
+  // Front del jugador (5.81): /app/?e=<slug>. Con barra final; sin ella redirige.
+  router.get("/app", (req, res, next) => {
+    const [ruta, consulta] = req.originalUrl.split("?");
+    if (ruta.endsWith("/")) return next();
+    res.redirect(301, `${ruta}/${consulta ? `?${consulta}` : ""}`);
+  });
+  router.use("/app", crearFront({ dist }));
   router.use("/p/:slug", crearRouterPublico({ core, servicio, partidas, intercambios, premios }));
 
   // Índices únicos listos antes de atender (el gateway puede esperar a `router.listo`).

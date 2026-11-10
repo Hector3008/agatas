@@ -70,6 +70,19 @@ Configuración (como en 5.79): `GET /estado`, `GET /config` y `PUT /config` (`ju
 - `premio` (`PR`): `pendiente → entregado | anulado` (permiso `juego:validar`).
 - Colecciones: `agatas_config`, `agatas_partidas`, `agatas_intercambios` (invitación → documento IA), `agatas_premios`.
 
+## Front del jugador (5.81)
+
+Una SPA React + Vite que se sirve en **`/agatas/app/?e=<slug>`** (el QR general del local apunta a esa URL; `&i=<CÓDIGO>` abre un intercambio).
+Pantallas: entrada (apodo), mano con colores, ofrecer (QR + código de 8 letras), unirse (por enlace/QR o escribiendo el código), preguntas de ambos + confirmar con cuenta regresiva, y premios con código de canje.
+
+- `client/dist` **está commiteado** (como cuenta/restaurante): el servidor no necesita compilar. Si cambias `client/src`, ejecuta `npm run build:client` y commitea `client/dist`.
+- Desarrollo: `cd client && npm install && npm run dev` (proxy de `/agatas/p` a `localhost:3000`).
+- La API se resuelve relativa a la página (`../p/<slug>/`), así funciona detrás de cualquier prefijo del gateway.
+- Seguridad: CSP estricta (solo `'self'`), sin HTML inyectado (el QR es SVG dibujado con React), `index.html` sin caché y assets inmutables.
+- Sondeo cada 2,5–4 s solo mientras la pestaña está visible (sin websockets).
+- Límites: `requiereCuenta=true` muestra solo un aviso (no hay login en este front); no hay lector de QR propio (se usa la cámara del celular); si se pierde la cookie, la partida anónima no se recupera.
+- Prueba en navegador real con dos jugadores: `npm i -D playwright` y `npm run e2e` (no forma parte de `npm test`).
+
 ## Pruebas
 
 ```
