@@ -105,3 +105,65 @@ test("api: arma las rutas relativas a la página, manda CSRF solo al escribir y 
   const caida = crearApi("x", { href: "https://a/b/", fetchFn: async () => { throw new TypeError("fail"); } });
   await assert.rejects(() => caida.partida(), (e) => e.red === true);
 });
+
+// ───── Mesero (5.82) ─────
+import { normalizarCanje, formatearCanje, mensajeStaff, fechaCorta, sinSesion, sinPermiso } from "../src/lib/mesero.js";
+import { esMesero } from "../src/lib/util.js";
+import { crearApiStaff } from "../src/api-staff.js";
+
+test("normalizarCanje acepta guion, minúsculas y espacios, y exige 8 caracteres", () => {
+  assert.equal(normalizarCanje("8x56-9xpl"), "8X569XPL");
+  assert.equal(normalizarCanje(" 8X56 9XPL "), "8X569XPL");
+  assert.equal(normalizarCanje("8X56-9XP"), null);
+  assert.equal(normalizarCanje("8X56-9XPLA"), null);
+  assert.equal(normalizarCanje(null), null);
+});
+
+test("formatearCanje pone el guion al escribir y corta a 8", () => {
+  assert.equal(formatearCanje("8x5"), "8X5");
+  assert.equal(formatearCanje("8x569"), "8X56-9");
+  assert.equal(formatearCanje("8x569xplzz"), "8X56-9XPL");
+});
+
+test("mensajeStaff traduce los casos del mesero", () => {
+  assert.match(mensajeStaff({ status: 401 }), /sesión caducó/);
+  assert.match(mensajeStaff({ status: 403 }), /permiso/);
+  assert.match(mensajeStaff({ status: 404, codigo: "CODIGO_NO_ENCONTRADO" }), /no existe/);
+  assert.equal(mensajeStaff({ status: 409, codigo: "YA_PROCESADO", mensaje: "Ese código ya está «entregado»" }), "Ese código ya está «entregado»");
+  assert.match(mensajeStaff({ red: true, status: 0 }), /Sin conexión/);
+  assert.ok(sinSesion({ status: 401 }) && sinPermiso({ status: 403 }) && !sinSesion({ status: 403 }));
+});
+
+test("fechaCorta: hoy con hora, otro día con fecha, inválida vacía", () => {
+  const ahora = new Date(2026, 10, 9, 20, 0);
+  assert.equal(fechaCorta(new Date(2026, 10, 9, 14, 5).toISOString(), ahora), "hoy 14:05");
+  assert.equal(fechaCorta(new Date(2026, 10, 8, 9, 3).toISOString(), ahora), "8 nov 09:03");
+  assert.equal(fechaCorta("nada", ahora), "");
+});
+
+test("esMesero solo con m=mesero", () => {
+  assert.equal(esMesero("?m=mesero"), true);
+  assert.equal(esMesero("?e=gecko"), false);
+  assert.equal(esMesero(""), false);
+});
+
+test("api-staff: URL relativa a la página, CSRF solo en POST y errores del núcleo y de agatas", async () => {
+  const llamadas = [];
+  const respuestas = [
+    { ok: true, json: async () => ({ premios: [] }) },
+    { ok: false, status: 401, json: async () => ({ error: "no autenticado", codigo: "SIN_SESION" }) },
+    { ok: false, status: 404, json: async () => ({ error: "CODIGO_NO_ENCONTRADO", mensaje: "Ese código no existe" }) },
+    { ok: true, json: async () => ({ estado: "entregado" }) },
+  ];
+  const api = crearApiStaff({ href: "https://x.com/base/agatas/app/?m=mesero", fetchFn: async (url, init) => { llamadas.push([url, init]); return respuestas.shift(); } });
+  await api.premios("pendiente");
+  await assert.rejects(api.partidas(), (e) => e.status === 401 && e.codigo === "SIN_SESION");
+  await assert.rejects(api.consultar("8X569XPL"), (e) => e.codigo === "CODIGO_NO_ENCONTRADO" && e.mensaje === "Ese código no existe");
+  await api.entregar("8X569XPL");
+  assert.equal(llamadas[0][0], "https://x.com/base/agatas/staff/premios?estado=pendiente");
+  assert.equal(llamadas[0][1].headers["x-requested-with"], undefined);
+  assert.equal(llamadas[3][0], "https://x.com/base/agatas/staff/premios/8X569XPL/entregar");
+  assert.equal(llamadas[3][1].method, "POST");
+  assert.equal(llamadas[3][1].headers["x-requested-with"], "fetch");
+  assert.equal(llamadas[0][1].credentials, "same-origin");
+});

@@ -1,6 +1,6 @@
 {
   "name": "agatas",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Juego de intercambio de agatas de colores para Gecko Café (servicio de la plataforma Ilnapo)",
   "type": "module",
   "main": "src/index.js",
@@ -10,7 +10,7 @@
   "scripts": {
     "test": "node --test",
     "build:client": "npm --prefix client install && npm --prefix client run build",
-    "e2e": "mkdir -p e2e/capturas && node e2e/flujo.mjs"
+    "e2e": "mkdir -p e2e/capturas && node e2e/flujo.mjs && node e2e/mesero.mjs"
   },
   "engines": {
     "node": ">=22"

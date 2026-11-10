@@ -193,3 +193,18 @@ details.como p { margin-top: 10px; }
 .entrada form { margin-top: 6px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ───── Mesero (5.82) ───── */
+.pestanas { display: flex; gap: 6px; margin: 0 0 12px; }
+.pestana { flex: 1; min-height: 44px; border: 1px solid var(--linea); background: var(--superficie); color: var(--tinta); border-radius: 12px; font: inherit; font-weight: 600; cursor: pointer; }
+.pestana.activa { background: var(--acento); color: var(--acento-texto); border-color: var(--acento); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
+.chip { min-height: 40px; padding: 0 14px; border: 1px solid var(--linea); background: transparent; color: var(--tinta); border-radius: 999px; font: inherit; cursor: pointer; }
+.chip.activo { background: var(--acento); color: var(--acento-texto); border-color: var(--acento); }
+.lista-simple { list-style: none; margin: 0; padding: 0; }
+.lista-simple li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--linea); }
+.resultado-canje { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--linea); }
+a.boton { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+.form-canje input { width: 100%; font-family: var(--mono); font-size: 22px; letter-spacing: 0.14em; text-transform: uppercase; text-align: center; }
+.form-canje .boton { width: 100%; margin-top: 10px; }
+.acciones .boton + .boton { margin-top: 8px; }

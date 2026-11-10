@@ -4,7 +4,8 @@ import { Aviso } from "./componentes.jsx";
 import Entrada from "./pantallas/Entrada.jsx";
 import Mano from "./pantallas/Mano.jsx";
 import Intercambio from "./pantallas/Intercambio.jsx";
-import { contraste, leerParametros, mensajeError } from "./lib/util.js";
+import Mesero from "./pantallas/Mesero.jsx";
+import { contraste, esMesero, leerParametros, mensajeError } from "./lib/util.js";
 
 function fijarInvitacion(inv) {
   const u = new URL(window.location.href);
@@ -14,6 +15,11 @@ function fijarInvitacion(inv) {
 }
 
 export default function App() {
+  if (esMesero(window.location.search)) return <Mesero />;
+  return <Juego />;
+}
+
+function Juego() {
   const { slug, invitacion } = useMemo(() => leerParametros(window.location.search), []);
   const api = useMemo(() => (slug ? crearApi(slug) : null), [slug]);
   const [info, setInfo] = useState(null);

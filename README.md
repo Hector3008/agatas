@@ -83,6 +83,10 @@ Pantallas: entrada (apodo), mano con colores, ofrecer (QR + código de 8 letras)
 - Límites: `requiereCuenta=true` muestra solo un aviso (no hay login en este front); no hay lector de QR propio (se usa la cámara del celular); si se pierde la cookie, la partida anónima no se recupera.
 - Prueba en navegador real con dos jugadores: `npm i -D playwright` y `npm run e2e` (no forma parte de `npm test`).
 
+## Pantalla del mesero (5.82)
+
+`/agatas/app/?m=mesero` (mismo build del front). Usa la sesión de `cuenta` (cookie `sid`, mismo dominio): sin sesión muestra «Entra a tu cuenta» con un enlace a `../../cuenta/`. Pestañas: **Canjear** (escribir el código de canje, ver premio y jugador, «Entregar premio» o «Anular código» con motivo), **Premios** (pendientes, entregados y anulados; se actualiza cada 10 s) y **Jugadores**. Pide `juego:validar` y `juego:leer` (rol `mesero_juego`). Sin lector de QR: el código se escribe (ignora guion, espacios y minúsculas).
+
 ## Pruebas
 
 ```

@@ -100,3 +100,6 @@ export function resumenColores(mano) {
   for (const a of mano) cuenta.set(a.colorId, (cuenta.get(a.colorId) ?? 0) + 1);
   return [...cuenta].map(([colorId, n]) => ({ colorId, n }));
 }
+
+/** ¿La página se abrió como pantalla del mesero? (`?m=mesero`) */
+export const esMesero = (search) => new URLSearchParams(search).get("m") === "mesero";

@@ -38,7 +38,7 @@ export function createRouter({ core, dist } = {}) {
   router.use(express.json());
 
   router.get("/estado", (_req, res) => {
-    res.json({ servicio: "agatas", version: "0.3.0", ok: true });
+    res.json({ servicio: "agatas", version: "0.4.0", ok: true });
   });
 
   // `exigirCsrf` del núcleo lanza en vez de llamar a next(): middlewareCsrf lo adapta.
