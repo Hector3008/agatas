@@ -48,6 +48,11 @@ export function crearModeloPartida(core) {
         ventana: { type: Date, default: Date.now },
         n: { type: Number, default: 0 },
       },
+      // 5.83: «activa» o «retirada» (la retira el mesero; queda el historial). Sin el campo = activa.
+      estado: { type: String, enum: ["activa", "retirada"], default: "activa" },
+      creadaTs: { type: Date, default: null }, // con él se decide si el reinicio programado ya la dejó atrás
+      retiradaTs: { type: Date, default: null },
+      retiradaPor: { type: ObjectId, default: null },
     },
     { timestamps: true },
   );

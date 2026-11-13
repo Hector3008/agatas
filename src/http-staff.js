@@ -3,7 +3,7 @@ import { PERMISOS } from "./roles.js";
 import { manejar, middlewareCsrf } from "./http.js";
 
 /** Rutas del personal (mesero y administración), bajo /staff. */
-export function crearRouterStaff({ core, premios }) {
+export function crearRouterStaff({ core, premios, retiros }) {
   const csrf = middlewareCsrf(core);
   const auth = core.autenticar({ requiereEmpresa: true });
   const actorDe = (req) => ({ usuarioId: req.auth.usuarioId, permisos: req.rol?.permisos ?? [] });
@@ -30,7 +30,17 @@ export function crearRouterStaff({ core, premios }) {
   }));
 
   r.get("/partidas", auth, core.requierePermiso(PERMISOS.leer), manejar(async (req, res) => {
-    res.json({ partidas: await premios.partidas(ctx(req)) });
+    res.json({ partidas: await retiros.listar(ctx(req)) });
+  }));
+
+  r.post("/partidas/:id/retirar", auth, csrf, core.requierePermiso(PERMISOS.validar), manejar(async (req, res) => {
+    res.json(await retiros.retirar({ ...ctx(req), id: req.params.id }));
+  }));
+
+  // Empresa de quien atiende (para mostrar su identificador en la pantalla del mesero).
+  r.get("/empresa", auth, manejar(async (req, res) => {
+    const e = await core.modelos?.Empresa?.findOne({ _id: req.auth.empresaId }).lean();
+    res.json({ slug: e?.slug ?? null });
   }));
 
   return r;

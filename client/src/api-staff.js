@@ -42,5 +42,7 @@ export function crearApiStaff({ href = globalThis.location?.href, fetchFn = (...
     entregar: (codigo) => pedir("POST", `premios/${c(codigo)}/entregar`),
     anular: (codigo, motivo) => pedir("POST", `premios/${c(codigo)}/anular`, { motivo: motivo ?? "" }),
     partidas: () => pedir("GET", "partidas"),
+    retirar: (id) => pedir("POST", `partidas/${c(id)}/retirar`),
+    empresa: () => pedir("GET", "empresa"),
   };
 }

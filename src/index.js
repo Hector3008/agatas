@@ -5,6 +5,7 @@ import { crearServicio, ErrorAgatas } from "./servicio.js";
 import { crearPartidas } from "./partidas.js";
 import { crearIntercambios } from "./intercambios.js";
 import { crearPremios } from "./premios.js";
+import { crearRetiros } from "./retiros.js";
 import { crearRouterPublico } from "./http-publico.js";
 import { crearRouterStaff } from "./http-staff.js";
 import { crearFront } from "./front.js";
@@ -13,6 +14,7 @@ import { PERMISOS } from "./roles.js";
 
 export { TIPO_INTERCAMBIO, TIPO_PREMIO, MOTIVOS_CANCELACION } from "./tipos.js";
 export * from "./config.js";
+export { MODOS_REINICIO, REINICIO_POR_DEFECTO, ultimoLimite, vigenteDesde, textoReinicio } from "./reinicio.js";
 export { PERMISOS, PLANTILLA_ROLES } from "./roles.js";
 export { crearServicio, ErrorAgatas } from "./servicio.js";
 export { armarMano, coloresDistintos, estadoPremios } from "./juego.js";
@@ -33,12 +35,13 @@ export function createRouter({ core, dist } = {}) {
   const partidas = crearPartidas({ M, configDe: servicio.configDe });
   const intercambios = crearIntercambios({ M, documentos: core.documentos, configDe: servicio.configDe, partidas });
   const premios = crearPremios({ M, documentos: core.documentos, configDe: servicio.configDe });
+  const retiros = crearRetiros({ M, partidas, intercambios, premios, configDe: servicio.configDe });
 
   const router = express.Router();
   router.use(express.json());
 
   router.get("/estado", (_req, res) => {
-    res.json({ servicio: "agatas", version: "0.4.0", ok: true });
+    res.json({ servicio: "agatas", version: "0.5.0", ok: true });
   });
 
   // `exigirCsrf` del núcleo lanza en vez de llamar a next(): middlewareCsrf lo adapta.
@@ -64,7 +67,7 @@ export function createRouter({ core, dist } = {}) {
     }),
   );
 
-  router.use("/staff", crearRouterStaff({ core, premios }));
+  router.use("/staff", crearRouterStaff({ core, premios, retiros }));
   // Front del jugador (5.81): /app/?e=<slug>. Con barra final; sin ella redirige.
   router.get("/app", (req, res, next) => {
     const [ruta, consulta] = req.originalUrl.split("?");
@@ -77,7 +80,7 @@ export function createRouter({ core, dist } = {}) {
   // Índices únicos listos antes de atender (el gateway puede esperar a `router.listo`).
   router.listo = Promise.all(Object.values(M).map((m) => m.init?.())).then(() => undefined);
   router.servicio = servicio;
-  router.juego = { partidas, intercambios, premios };
+  router.juego = { partidas, intercambios, premios, retiros };
   return router;
 }
 

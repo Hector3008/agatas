@@ -59,6 +59,9 @@ export function crearPremios({ M, documentos, configDe, ahora = () => Date.now()
     return conEmpresa(empresaId, async () => {
       // Se cuenta con la mano de ahora mismo, no con la que se cargó al empezar la petición.
       const viva = await M.Partida.findOne({ _id: partida._id }).lean();
+      if (!viva || (viva.estado ?? "activa") === "retirada") {
+        throw new ErrorAgatas("PARTIDA_RETIRADA", "El personal retiró tu partida. Puedes empezar una nueva.", 401);
+      }
       const tiene = coloresDistintos(viva.mano).length;
 
       let reg = await M.Premio.findOne({ partidaId: partida._id, premioId }).lean();
@@ -191,19 +194,32 @@ export function crearPremios({ M, documentos, configDe, ahora = () => Date.now()
     });
   }
 
-  async function partidas({ empresaId, actor, limite = 100 }) {
-    exigir(actor, PERMISOS.leer);
+  /**
+   * Anula los premios todavía pendientes de una partida (cuando el mesero la retira). Los ya entregados
+   * no se tocan. Repetirlo no hace daño. Devuelve cuántos anuló.
+   */
+  async function anularPendientesDe({ empresaId, actor, partidaId, motivo = "otro" }) {
+    exigir(actor, PERMISOS.validar);
+    const config = await configDe({ empresaId });
     return conEmpresa(empresaId, async () => {
-      const lista = await M.Partida.find({}).sort({ createdAt: -1 }).limit(Math.min(limite, 200)).lean();
-      return lista.map((p) => ({
-        id: String(p._id),
-        apodo: p.apodo,
-        colorId: p.colorId,
-        distintos: coloresDistintos(p.mano).length,
-        creada: p.createdAt,
-      }));
+      const partida = await M.Partida.findOne({ _id: partidaId }).lean();
+      const regs = await M.Premio.find({ partidaId }).lean();
+      let anulados = 0;
+      for (const reg of regs) {
+        const premio = config.premios.find((p) => p.id === reg.premioId) ?? { nombre: reg.premioId, descripcion: "" };
+        // Si el documento del premio todavía no existía, se crea para poder anularlo: si no, el código seguiría valiendo.
+        const prCode = await asegurarPr(reg, datosPr(reg, premio, partida ?? { _id: partidaId, apodo: "?" }));
+        if (!prCode) continue;
+        try {
+          await documentos.transicionar({ code: prCode, a: "anulado", motivo: { codigo: motivo }, usuarioId: actor.usuarioId ?? null, permisos: actor.permisos });
+          anulados++;
+        } catch (e) {
+          if (!esConflicto(e)) throw e; // ya estaba entregado o anulado
+        }
+      }
+      return anulados;
     });
   }
 
-  return { reclamar, reclamadosDe, consultar, entregar, anular, listar, partidas };
+  return { reclamar, reclamadosDe, consultar, entregar, anular, listar, anularPendientesDe };
 }

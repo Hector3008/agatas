@@ -6,6 +6,7 @@ import Mano from "./pantallas/Mano.jsx";
 import Intercambio from "./pantallas/Intercambio.jsx";
 import Mesero from "./pantallas/Mesero.jsx";
 import { contraste, esMesero, leerParametros, mensajeError } from "./lib/util.js";
+import { textoReinicio } from "./lib/reinicio.js";
 
 function fijarInvitacion(inv) {
   const u = new URL(window.location.href);
@@ -21,11 +22,24 @@ export default function App() {
 
 function Juego() {
   const { slug, invitacion } = useMemo(() => leerParametros(window.location.search), []);
-  const api = useMemo(() => (slug ? crearApi(slug) : null), [slug]);
   const [info, setInfo] = useState(null);
   const [partida, setPartida] = useState(undefined); // undefined = cargando; null = todavía no juega
   const [error, setError] = useState(null);
+  const [aviso, setAviso] = useState(null); // por qué volvió a la entrada (la retiraron, se reinició el juego)
   const [pantalla, setPantalla] = useState(invitacion ? { tipo: "intercambio", inv: invitacion } : { tipo: "mano" });
+  const api = useMemo(
+    () =>
+      slug
+        ? crearApi(slug, {
+            alPerder: (codigo, mensaje) => {
+              setPartida(null);
+              setPantalla({ tipo: "mano" });
+              if (codigo !== "SIN_PARTIDA") setAviso(mensaje);
+            },
+          })
+        : null,
+    [slug],
+  );
 
   const recargar = useCallback(async () => {
     try {
@@ -89,7 +103,7 @@ function Juego() {
   return (
     <main className="app" style={estilo}>
       <header className="marca">
-        <span className="marca-nombre">Gecko Café</span>
+        <span className="marca-nombre">{slug}</span>
         {partida && <span className="marca-jugador">{partida.apodo}</span>}
       </header>
       {error && <Aviso>{error}</Aviso>}
@@ -98,7 +112,9 @@ function Juego() {
           info={info}
           api={api}
           invitacion={invitacion}
+          aviso={aviso}
           onPartida={(p) => {
+            setAviso(null);
             setPartida(p);
           }}
         />
@@ -115,6 +131,7 @@ function Juego() {
       ) : (
         <Mano info={info} partida={partida} api={api} onCambio={recargar} onIr={ir} />
       )}
+      {textoReinicio(info.reinicio) && <p className="pie-reinicio">{textoReinicio(info.reinicio)}</p>}
     </main>
   );
 }

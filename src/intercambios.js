@@ -111,12 +111,31 @@ export function crearIntercambios({ M, documentos, configDe, partidas, ahora = (
    * Lee el documento aplicando lo que toque: vencer lo que se pasó de tiempo y terminar
    * lo que ya tiene las dos confirmaciones (así una caída a mitad del cambio se repara sola).
    */
-  async function refrescar(idx) {
+  // ¿Alguno de los dos jugadores ya no está en juego (lo retiraron o el juego se reinició)? → motivo del cierre.
+  async function jugadorInvalido(d, config) {
+    for (const id of [d.a.partidaId, d.b?.partidaId].filter(Boolean)) {
+      const p = await M.Partida.findOne({ _id: id }).lean();
+      const m = p ? partidas.motivoInvalida(p, config) : "retirada";
+      if (m) return m === "reiniciada" ? "reinicio" : "retirado";
+    }
+    return null;
+  }
+
+  async function refrescar(idx, config) {
     for (let i = 0; i < 6; i++) {
       const ia = await documentos.obtener({ code: idx.iaCode });
       if (!ia) throw noEncontrado();
       const d = ia.payload.doc;
       const t = ahora();
+      // Con las dos confirmaciones el cambio ya empezó: se termina aunque alguien se retire a mitad.
+      const confirmado = ia.estado === "aceptado" && d.conf.a && d.conf.b;
+      if ((ia.estado === "propuesto" || ia.estado === "aceptado") && !confirmado) {
+        const motivo = await jugadorInvalido(d, config);
+        if (motivo) {
+          await cerrar(ia, "cancelado", { codigo: motivo });
+          continue;
+        }
+      }
       if (ia.estado === "propuesto" && t > d.ofertaVence) {
         await cerrar(ia, "vencido", { codigo: "sin_respuesta" });
         continue;
@@ -227,7 +246,7 @@ export function crearIntercambios({ M, documentos, configDe, partidas, ahora = (
     const config = await configDe({ empresaId });
     return conEmpresa(empresaId, async () => {
       const idx = await buscar(partida, invitacion);
-      const ia = await refrescar(idx);
+      const ia = await refrescar(idx, config);
       const v = vista({ ia, partida, config });
       // Un intercambio ajeno que ya no está en oferta no se enseña a extraños.
       if (!v.participa && ia.estado !== "propuesto") throw noDisponible();
@@ -239,7 +258,7 @@ export function crearIntercambios({ M, documentos, configDe, partidas, ahora = (
     const config = await configDe({ empresaId });
     return conEmpresa(empresaId, async () => {
       const idx = await buscar(partida, invitacion);
-      const ia = await refrescar(idx);
+      const ia = await refrescar(idx, config);
       const d = ia.payload.doc;
       if (ia.estado !== "propuesto") throw noDisponible("Esa oferta ya fue tomada, cancelada o venció");
       if (d.a.partidaId === String(partida._id)) {
@@ -287,7 +306,7 @@ export function crearIntercambios({ M, documentos, configDe, partidas, ahora = (
     return conEmpresa(empresaId, async () => {
       const idx = await buscar(partida, invitacion);
       for (let i = 0; i < 6; i++) {
-        const ia = await refrescar(idx);
+        const ia = await refrescar(idx, config);
         const d = ia.payload.doc;
         const rol = rolDe(d, partida);
         if (!rol) throw noEncontrado();
@@ -305,7 +324,7 @@ export function crearIntercambios({ M, documentos, configDe, partidas, ahora = (
           throw e;
         }
         // Si con esta ya están las dos, refrescar termina el cambio.
-        return vista({ ia: await refrescar(idx), partida, config });
+        return vista({ ia: await refrescar(idx, config), partida, config });
       }
       throw noDisponible("El intercambio cambió varias veces seguidas; vuelve a intentarlo");
     });
@@ -316,7 +335,7 @@ export function crearIntercambios({ M, documentos, configDe, partidas, ahora = (
     return conEmpresa(empresaId, async () => {
       const idx = await buscar(partida, invitacion);
       for (let i = 0; i < 6; i++) {
-        const ia = await refrescar(idx);
+        const ia = await refrescar(idx, config);
         const d = ia.payload.doc;
         if (!rolDe(d, partida)) throw noEncontrado();
         if (ia.estado === "cancelado" || ia.estado === "vencido") return vista({ ia, partida, config });
@@ -337,6 +356,7 @@ export function crearIntercambios({ M, documentos, configDe, partidas, ahora = (
   async function sanear({ empresaId, partida }) {
     const reservadas = partida.mano.filter((m) => m.reservadaPor);
     if (!reservadas.length) return { partida, abiertos: [] };
+    const config = await configDe({ empresaId });
     return conEmpresa(empresaId, async () => {
       const abiertos = [];
       for (const m of reservadas) {
@@ -347,7 +367,7 @@ export function crearIntercambios({ M, documentos, configDe, partidas, ahora = (
           else abiertos.push({ invitacion: m.reservadaPor, aid: m.aid, estado: "creandose" });
           continue;
         }
-        const ia = await refrescar(idx);
+        const ia = await refrescar(idx, config);
         if (FINALES.has(ia.estado)) {
           await liberar(partida._id, m.reservadaPor);
           continue;

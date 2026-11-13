@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Aviso, Boton } from "../componentes.jsx";
 import { capitalizar, mensajeError } from "../lib/util.js";
 
-export default function Entrada({ info, api, invitacion, onPartida }) {
+export default function Entrada({ info, api, invitacion, aviso = null, onPartida }) {
   const [apodo, setApodo] = useState("");
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -32,12 +32,12 @@ export default function Entrada({ info, api, invitacion, onPartida }) {
 
   return (
     <section className="tarjeta entrada">
-      <p className="sobretitulo">Gecko Café</p>
       <h1>Juego de {plural}</h1>
       <p className="lead">
         Junta {info.premios[0]?.umbral ?? 3} colores distintos o más intercambiando {plural} con otras personas del
         local. Cada intercambio se hace cara a cara, respondiendo una pregunta.
       </p>
+      {aviso && <Aviso tipo="info">{aviso}</Aviso>}
       {invitacion && <Aviso tipo="info">Te invitaron a un intercambio. Escribe tu apodo y entra para verlo.</Aviso>}
       <form onSubmit={entrar}>
         <label htmlFor="apodo">¿Cómo te llamamos?</label>

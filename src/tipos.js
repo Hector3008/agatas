@@ -6,6 +6,8 @@ export const MOTIVOS_CANCELACION = Object.freeze([
   "no_respondio",
   "error",
   "otro",
+  "retirado", // el mesero retiró a uno de los dos jugadores (5.83)
+  "reinicio", // el juego se reinició con el intercambio abierto (5.83)
 ]);
 
 /**

@@ -75,8 +75,11 @@ export function fase(v) {
 const MOTIVOS = {
   sin_respuesta: "Se acabó el tiempo.",
   se_arrepintio: "Alguien canceló el intercambio.",
+  no_respondio: "La otra persona no respondió.",
   error: "Hubo un problema y se canceló.",
   otro: "El intercambio se canceló.",
+  retirado: "El personal retiró a una de las dos personas y el intercambio se canceló.",
+  reinicio: "El juego se reinició y el intercambio se canceló.",
 };
 export const textoMotivo = (m) => MOTIVOS[m] ?? "Este intercambio ya no está disponible.";
 

@@ -14,7 +14,10 @@ export class ErrorApi extends Error {
  * `href` es la dirección de esta página (p. ej. https://x/agatas/app/): el API queda en `../p/<slug>/`,
  * así funciona con cualquier prefijo con el que el gateway monte el servicio.
  */
-export function crearApi(slug, { href = globalThis.location?.href, fetchFn = (...a) => globalThis.fetch(...a) } = {}) {
+// Respuestas que significan «tu partida ya no vale»: se avisa a la aplicación para volver a la entrada.
+const PARTIDA_PERDIDA = new Set(["SIN_PARTIDA", "PARTIDA_RETIRADA", "PARTIDA_REINICIADA"]);
+
+export function crearApi(slug, { href = globalThis.location?.href, fetchFn = (...a) => globalThis.fetch(...a), alPerder = null } = {}) {
   const raiz = new URL(`../p/${encodeURIComponent(slug)}/`, href);
 
   async function pedir(metodo, ruta, cuerpo) {
@@ -37,11 +40,13 @@ export function crearApi(slug, { href = globalThis.location?.href, fetchFn = (..
       /* la respuesta no era JSON */
     }
     if (!r.ok) {
-      throw new ErrorApi({
+      const e = new ErrorApi({
         codigo: datos?.error ?? "ERROR",
         mensaje: datos?.mensaje ?? "Ocurrió un error inesperado.",
         status: r.status,
       });
+      if (r.status === 401 && PARTIDA_PERDIDA.has(e.codigo)) alPerder?.(e.codigo, e.mensaje);
+      throw e;
     }
     return datos;
   }

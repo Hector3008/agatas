@@ -25,6 +25,13 @@ export const PESTANAS_LISTA = [
   ["anulado", "Anulados"],
 ];
 
+/** Motivos que acepta el servidor al anular un código (no admite texto libre). */
+export const MOTIVOS_ANULACION = [
+  ["error", "Se emitió por error"],
+  ["fraude", "Trampa o fraude"],
+  ["otro", "Otro motivo"],
+];
+
 /** Texto para el mesero según lo que respondió el servidor. */
 export function mensajeStaff(e) {
   if (!e) return "";
@@ -33,6 +40,7 @@ export function mensajeStaff(e) {
   if (e.status === 403) return "Tu usuario no tiene permiso para esto.";
   if (e.status === 429) return "Demasiados intentos. Espera un momento.";
   if (e.codigo === "CODIGO_NO_ENCONTRADO") return "Ese código no existe. Revisa que esté bien escrito.";
+  if (e.codigo === "JUGADOR_NO_ENCONTRADO") return "Ese jugador ya no está en la lista.";
   if (e.codigo === "YA_PROCESADO") return e.mensaje || "Ese código ya fue procesado.";
   if (e.status >= 500) return "El servidor tuvo un problema. Inténtalo de nuevo.";
   return e.mensaje || "No se pudo completar la acción.";

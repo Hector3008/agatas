@@ -1,6 +1,8 @@
 // Configuración del juego, por empresa. Lógica pura: sin base de datos.
 // Todo lo que el admin puede cambiar vive aquí y se valida aquí.
 
+import { MODOS_REINICIO, REINICIO_POR_DEFECTO, minutosDeHora, zonaValida } from "./reinicio.js";
+
 export const LIMITES = Object.freeze({
   coloresMin: 2,
   coloresMax: 12,
@@ -49,6 +51,8 @@ export const CONFIG_POR_DEFECTO = Object.freeze({
     reservaVenceSeg: 900, // aceptado pero sin confirmar por los dos: se cae a los 15 minutos
     cookieDias: 30, // duración de la cookie de partida
   },
+  // Reinicio programado de las partidas (5.83). Por defecto nunca: nada cambia para quien ya tenía el juego.
+  reinicio: { ...REINICIO_POR_DEFECTO },
 });
 
 export class ErrorConfig extends Error {
@@ -112,7 +116,7 @@ export function validarConfig(entrada) {
   }
   const permitidas = new Set([
     "personaje", "colores", "agatasPorColor", "manoPorJugador",
-    "requiereCuenta", "premios", "preguntas", "textos", "reglas",
+    "requiereCuenta", "premios", "preguntas", "textos", "reglas", "reinicio",
   ]);
   for (const k of Object.keys(entrada)) {
     if (!permitidas.has(k)) throw new ErrorConfig(`Campo desconocido: ${k}`, k);
@@ -213,7 +217,21 @@ export function validarConfig(entrada) {
     reglas[k] = entero(rg[k] ?? CONFIG_POR_DEFECTO.reglas[k], `reglas.${k}`, min, max);
   }
 
-  return { personaje, colores, agatasPorColor, manoPorJugador, requiereCuenta: entrada.requiereCuenta, premios, preguntas, textos, reglas };
+  const rn = entrada.reinicio ?? {};
+  if (typeof rn !== "object" || Array.isArray(rn)) throw new ErrorConfig("reinicio: debe ser un objeto", "reinicio");
+  for (const k of Object.keys(rn)) {
+    if (!(k in REINICIO_POR_DEFECTO)) throw new ErrorConfig(`reinicio: campo desconocido «${k}»`, "reinicio");
+  }
+  const modo = rn.modo ?? REINICIO_POR_DEFECTO.modo;
+  if (!MODOS_REINICIO.includes(modo)) throw new ErrorConfig("reinicio.modo: nunca, diario o semanal", "reinicio");
+  const hora = rn.hora ?? REINICIO_POR_DEFECTO.hora;
+  if (minutosDeHora(hora) === null) throw new ErrorConfig("reinicio.hora: use HH:MM (de 00:00 a 23:59)", "reinicio");
+  const zona = rn.zona ?? REINICIO_POR_DEFECTO.zona;
+  if (!zonaValida(zona)) throw new ErrorConfig("reinicio.zona: zona horaria desconocida (ej. America/Lima)", "reinicio");
+  const diaSemana = entero(rn.diaSemana ?? REINICIO_POR_DEFECTO.diaSemana, "reinicio.diaSemana", 0, 6);
+  const reinicio = { modo, hora, diaSemana, zona };
+
+  return { personaje, colores, agatasPorColor, manoPorJugador, requiereCuenta: entrada.requiereCuenta, premios, preguntas, textos, reglas, reinicio };
 }
 
 /** Avisos que no impiden guardar pero dejan el juego cojo (el admin debería verlos). */
@@ -242,6 +260,7 @@ export function aplicarCambios(actual, cambios) {
   for (const [k, v] of Object.entries(cambios)) {
     if (k === "textos" && v && typeof v === "object" && !Array.isArray(v)) fusion.textos = { ...base.textos, ...v };
     else if (k === "reglas" && v && typeof v === "object" && !Array.isArray(v)) fusion.reglas = { ...CONFIG_POR_DEFECTO.reglas, ...base.reglas, ...v };
+    else if (k === "reinicio" && v && typeof v === "object" && !Array.isArray(v)) fusion.reinicio = { ...CONFIG_POR_DEFECTO.reinicio, ...base.reinicio, ...v };
     else if (k === "personaje" && v && typeof v === "object" && !Array.isArray(v)) fusion.personaje = { ...base.personaje, ...v };
     else fusion[k] = v;
   }
@@ -260,6 +279,7 @@ export function vistaPublica(config) {
     requiereCuenta: config.requiereCuenta,
     premios: config.premios.map(({ id, umbral, nombre, descripcion }) => ({ id, umbral, nombre, descripcion })),
     textos: config.textos,
+    reinicio: config.reinicio,
     // Tiempos que el front necesita para mostrar cuenta atrás
     tiempos: { ofertaVenceSeg: config.reglas.ofertaVenceSeg, reservaVenceSeg: config.reglas.reservaVenceSeg },
   };

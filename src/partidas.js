@@ -3,6 +3,7 @@ import { conEmpresa } from "core";
 import { ErrorAgatas } from "./servicio.js";
 import { armarMano, coloresDistintos, estadoPremios } from "./juego.js";
 import { crearContador, generarToken, hashToken } from "./util.js";
+import { vigenteDesde } from "./reinicio.js";
 
 const HORA = 3600_000;
 
@@ -14,6 +15,22 @@ export function limpiarApodo(valor) {
   }
   return t;
 }
+
+/**
+ * ¿La partida sigue valiendo? Devuelve null si sí, o el motivo: «retirada» (la sacó el mesero)
+ * o «reiniciada» (se creó antes del último reinicio programado). Las partidas anteriores a 5.83
+ * no traen `creadaTs` ni `estado`: se usan `createdAt` y «activa».
+ */
+export function motivoInvalida(partida, config, ahoraMs) {
+  if ((partida.estado ?? "activa") === "retirada") return "retirada";
+  const creada = new Date(partida.creadaTs ?? partida.createdAt ?? 0).getTime();
+  return vigenteDesde(config.reinicio, creada, ahoraMs) ? null : "reiniciada";
+}
+
+const ERRORES_INVALIDA = {
+  retirada: ["PARTIDA_RETIRADA", "El personal retiró tu partida. Puedes empezar una nueva."],
+  reiniciada: ["PARTIDA_REINICIADA", "El juego se reinició. Empieza una partida nueva; si tenías un premio sin canjear, pídele al personal que lo busque por tu apodo."],
+};
 
 /**
  * Partidas: crear (con color al azar y mano completa), reconocer al jugador por su cookie
@@ -34,7 +51,11 @@ export function crearPartidas({ M, configDe, ahora = () => Date.now(), aleatorio
       // borrada) entrega un token nuevo y deja sin efecto el anterior.
       if (clienteId) {
         const previa = await M.Partida.findOne({ clienteId }).lean();
-        if (previa) return recuperar(previa, config);
+        if (previa) {
+          if (!motivoInvalida(previa, config, ahora())) return recuperar(previa, config);
+          // Retirada o de antes del reinicio: se suelta el vínculo con la cuenta y empieza una partida nueva.
+          await M.Partida.updateOne({ _id: previa._id }, { $set: { clienteId: null } });
+        }
       }
       if (!porIp.golpe(ip, config.reglas.partidasPorIpHora)) {
         throw new ErrorAgatas("DEMASIADAS_PARTIDAS", "Demasiadas partidas nuevas desde esta conexión; prueba más tarde", 429);
@@ -51,12 +72,14 @@ export function crearPartidas({ M, configDe, ahora = () => Date.now(), aleatorio
           manoTam: config.manoPorJugador,
           mano: armarMano(config, colorId),
           cupo: { ventana: t, n: 0 },
+          estado: "activa",
+          creadaTs: t,
         });
         return { token, partida: partida.toObject?.() ?? partida, nueva: true };
       } catch (e) {
         if (e?.code === 11000 && clienteId) {
           const previa = await M.Partida.findOne({ clienteId }).lean();
-          if (previa) return recuperar(previa, config);
+          if (previa && !motivoInvalida(previa, config, ahora())) return recuperar(previa, config);
         }
         throw e;
       }
@@ -69,7 +92,7 @@ export function crearPartidas({ M, configDe, ahora = () => Date.now(), aleatorio
     return { token, partida: previa, nueva: false };
   }
 
-  /** Reconoce al jugador por el token de su cookie. */
+  /** Reconoce al jugador por el token de su cookie y comprueba que su partida siga valiendo. */
   async function porToken({ empresaId, token }) {
     if (!token || typeof token !== "string" || token.length > 100) {
       throw new ErrorAgatas("SIN_PARTIDA", "No tienes una partida abierta", 401);
@@ -77,6 +100,8 @@ export function crearPartidas({ M, configDe, ahora = () => Date.now(), aleatorio
     // Dentro de conEmpresa hay que esperar la consulta (es perezosa): si no, se ejecuta fuera de la empresa.
     const p = await conEmpresa(empresaId, async () => await M.Partida.findOne({ tokenHash: hashToken(token) }).lean());
     if (!p) throw new ErrorAgatas("SIN_PARTIDA", "No tienes una partida abierta", 401);
+    const motivo = motivoInvalida(p, await configDe({ empresaId }), ahora());
+    if (motivo) throw new ErrorAgatas(...ERRORES_INVALIDA[motivo], 401);
     return p;
   }
 
@@ -133,5 +158,5 @@ export function crearPartidas({ M, configDe, ahora = () => Date.now(), aleatorio
     };
   }
 
-  return { crear, porToken, recargar, cobrarCupo, vista };
+  return { crear, porToken, recargar, cobrarCupo, vista, motivoInvalida: (p, config) => motivoInvalida(p, config, ahora()) };
 }

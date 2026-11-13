@@ -31,7 +31,7 @@ export async function crearEntorno({ jitter = false, usuarios = {} } = {}) {
   // El modelo Empresa falso no filtra por empresa: lo hacemos pasar por global.
   const EmpresaGlobal = {
     findOne: (f) => ({
-      lean: async () => base.datos.get("empresas").find((e) => Object.entries(f).every(([k, v]) => e[k] === v)) ?? null,
+      lean: async () => base.datos.get("empresas").find((e) => Object.entries(f).every(([k, v]) => String(e[k]) === String(v))) ?? null,
     }),
   };
 

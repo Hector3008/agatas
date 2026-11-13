@@ -51,7 +51,9 @@ Personal (`/staff`, con sesión del núcleo):
 | `GET /staff/premios/:codigo` | `juego:validar` | Consulta un código de canje |
 | `POST /staff/premios/:codigo/entregar` | `juego:validar` | Entrega (una sola vez) |
 | `POST /staff/premios/:codigo/anular` `{ motivo }` | `juego:validar` | Anula (`error`, `fraude`, `otro`) |
-| `GET /staff/partidas` | `juego:leer` | Últimas partidas |
+| `GET /staff/partidas` | `juego:leer` | Partidas vigentes (sin las retiradas ni las reiniciadas) |
+| `POST /staff/partidas/:id/retirar` | `juego:validar` | Retira una partida: cancela sus intercambios y anula sus premios pendientes (los entregados no se tocan) |
+| `GET /staff/empresa` | sesión | `{ slug }` de la empresa, para el título de la pantalla del mesero |
 
 Configuración (como en 5.79): `GET /estado`, `GET /config` y `PUT /config` (`juego:configurar`).
 
@@ -62,6 +64,7 @@ Configuración (como en 5.79): `GET /estado`, `GET /config` y `PUT /config` (`ju
 - `requiereCuenta`: `false` = basta un apodo; `true` = hace falta cuenta de cliente.
 - `reglas` (5.80): `partidasPorIpHora` (30), `intercambiosPorHora` por jugador (12), `ofertaVenceSeg` (180),
   `reservaVenceSeg` (900), `cookieDias` (30).
+- `reinicio` (5.83): `modo` (`nunca` por defecto, `diario`, `semanal`), `hora` (`HH:MM`), `diaSemana` (0 = domingo … 6) y `zona` (IANA, `America/Lima`). Una partida solo vale si se creó después del último límite; se calcula al pedir, sin tareas programadas. Cambiar el horario puede reiniciar de inmediato a quien ya jugaba. La pantalla pública lo muestra al pie.
 - `GET/PUT /config` devuelve además `advertencias` (p. ej. un premio que pide más colores que la mano).
 
 ## Documentos y colecciones
@@ -85,7 +88,7 @@ Pantallas: entrada (apodo), mano con colores, ofrecer (QR + código de 8 letras)
 
 ## Pantalla del mesero (5.82)
 
-`/agatas/app/?m=mesero` (mismo build del front). Usa la sesión de `cuenta` (cookie `sid`, mismo dominio): sin sesión muestra «Entra a tu cuenta» con un enlace a `../../cuenta/`. Pestañas: **Canjear** (escribir el código de canje, ver premio y jugador, «Entregar premio» o «Anular código» con motivo), **Premios** (pendientes, entregados y anulados; se actualiza cada 10 s) y **Jugadores**. Pide `juego:validar` y `juego:leer` (rol `mesero_juego`). Sin lector de QR: el código se escribe (ignora guion, espacios y minúsculas).
+`/agatas/app/?m=mesero` (mismo build del front). Usa la sesión de `cuenta` (cookie `sid`, mismo dominio): sin sesión muestra «Entra a tu cuenta» con un enlace a `../../cuenta/`. Pestañas: **Canjear** (escribir el código de canje, ver premio y jugador, «Entregar premio» o «Anular código» con motivo: error, fraude u otro), **Premios** (pendientes, entregados y anulados; se actualiza cada 10 s) y **Jugadores** (botón «Retirar» con confirmación: el jugador vuelve a la entrada con un aviso y puede empezar otra partida; sus premios pendientes se anulan). El título muestra el slug de la empresa. Pide `juego:validar` y `juego:leer` (rol `mesero_juego`). Sin lector de QR: el código se escribe (ignora guion, espacios y minúsculas).
 
 ## Pruebas
 
@@ -104,6 +107,9 @@ MONGO_URL="mongodb://localhost:27017" node --test test/mongo.integration.test.js
 
 ## Límites conocidos
 
+- El reinicio es «perezoso»: no hay proceso programado; los premios pendientes de antes de un reinicio se pueden canjear con el mesero (que los busca por código o apodo), pero el jugador ya no ve su pantalla.
+- No hay «salir» para el jugador: solo el personal retira partidas.
+- Entre reclamar un premio y retirar a la persona hay una carrera diminuta que podría dejar un premio pendiente; el personal lo anula a mano.
 - Los topes por IP, los intentos con invitaciones inexistentes y los códigos inválidos del mesero viven en la memoria del
   proceso (se reinician con el servidor y no se comparten entre instancias). La IP es `req.ip`: el gateway debe
   tener `trust proxy` bien configurado.

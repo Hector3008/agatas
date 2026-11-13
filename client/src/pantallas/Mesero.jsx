@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { crearApiStaff } from "../api-staff.js";
 import { Aviso, Boton, useSondeo } from "../componentes.jsx";
 import {
-  ESTADOS_PREMIO, PESTANAS_LISTA, fechaCorta, formatearCanje, mensajeStaff, normalizarCanje, sinPermiso, sinSesion,
+  ESTADOS_PREMIO, MOTIVOS_ANULACION, PESTANAS_LISTA, fechaCorta, formatearCanje, mensajeStaff, normalizarCanje, sinPermiso, sinSesion,
 } from "../lib/mesero.js";
 
 // Pantalla del mesero (5.82): /agatas/app/?m=mesero. Valida el código de canje de un premio y lo marca como entregado
@@ -11,16 +11,21 @@ export default function Mesero() {
   const api = useMemo(() => crearApiStaff(), []);
   const [vista, setVista] = useState("canjear");
   const [bloqueo, setBloqueo] = useState(null); // "sesion" | "permiso"
+  const [empresa, setEmpresa] = useState(null);
 
   const revisar = useCallback((e) => {
     if (sinSesion(e)) setBloqueo("sesion");
     return e;
   }, []);
 
+  useEffect(() => {
+    api.empresa().then((r) => setEmpresa(r.slug), () => {}); // sin sesión no pasa nada: se avisa en la primera acción
+  }, [api]);
+
   return (
     <main className="app">
       <header className="marca">
-        <span className="marca-nombre">Gecko Café · Mesero</span>
+        <span className="marca-nombre">{empresa ? `${empresa} · Mesero` : "Mesero"}</span>
       </header>
       {bloqueo === "sesion" ? (
         <section className="tarjeta">
@@ -53,14 +58,14 @@ function Canjear({ api, revisar, onBloqueo }) {
   const [ok, setOk] = useState("");
   const [trabajando, setTrabajando] = useState(false);
   const [anulando, setAnulando] = useState(false);
-  const [motivo, setMotivo] = useState("");
+  const [motivo, setMotivo] = useState("otro");
   const codigo = normalizarCanje(texto);
 
   function limpiar() {
     setTexto("");
     setPremio(null);
     setAnulando(false);
-    setMotivo("");
+    setMotivo("otro");
   }
 
   async function buscar(e) {
@@ -85,7 +90,7 @@ function Canjear({ api, revisar, onBloqueo }) {
     setTrabajando(true);
     setError("");
     try {
-      const r = accion === "entregar" ? await api.entregar(codigo) : await api.anular(codigo, motivo.trim());
+      const r = accion === "entregar" ? await api.entregar(codigo) : await api.anular(codigo, motivo);
       setPremio(r);
       setAnulando(false);
       setOk(accion === "entregar" ? "Listo: premio entregado." : "Código anulado.");
@@ -142,8 +147,12 @@ function Canjear({ api, revisar, onBloqueo }) {
           )}
           {premio.estado === "pendiente" && anulando && (
             <div className="acciones">
-              <label htmlFor="motivo">Motivo (opcional)</label>
-              <input id="motivo" maxLength={120} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: la persona no jugó limpio" />
+              <label htmlFor="motivo">Motivo</label>
+              <select id="motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+                {MOTIVOS_ANULACION.map(([id, t]) => (
+                  <option key={id} value={id}>{t}</option>
+                ))}
+              </select>
               <Boton variante="peligro" cargando={trabajando} onClick={() => cerrar("anular")}>Sí, anular</Boton>
               <Boton variante="secundario" disabled={trabajando} onClick={() => setAnulando(false)}>Volver</Boton>
             </div>
@@ -209,6 +218,9 @@ function Lista({ api, revisar }) {
 function Jugadores({ api, revisar }) {
   const [lista, setLista] = useState(null);
   const [error, setError] = useState("");
+  const [ok, setOk] = useState("");
+  const [confirmando, setConfirmando] = useState(null); // id del jugador a punto de retirarse
+  const [retirando, setRetirando] = useState(null);
   const cargar = useCallback(async () => {
     try {
       setLista((await api.partidas()).partidas ?? []);
@@ -221,25 +233,53 @@ function Jugadores({ api, revisar }) {
   useEffect(() => {
     cargar();
   }, [cargar]);
-  useSondeo(cargar, 15000, true);
+  useSondeo(cargar, 15000, retirando === null);
+
+  async function retirar(j) {
+    setRetirando(j.id);
+    setError("");
+    setOk("");
+    try {
+      const r = await api.retirar(j.id);
+      setOk(`Retiraste a ${r.apodo}.${r.premiosAnulados ? ` Se anuló ${r.premiosAnulados === 1 ? "1 premio pendiente" : `${r.premiosAnulados} premios pendientes`}.` : ""}`);
+      setConfirmando(null);
+      await cargar();
+    } catch (err) {
+      revisar(err);
+      setError(mensajeStaff(err));
+    } finally {
+      setRetirando(null);
+    }
+  }
 
   return (
     <section className="tarjeta" aria-labelledby="t-jug">
       <h1 id="t-jug">Jugadores</h1>
       <Aviso>{error}</Aviso>
+      <Aviso tipo="info">{ok}</Aviso>
       {lista === null && !error && <p className="cargando" role="status">Cargando…</p>}
-      {lista?.length === 0 && <p className="suave">Todavía nadie ha empezado a jugar.</p>}
+      {lista?.length === 0 && <p className="suave">Nadie está jugando ahora mismo.</p>}
       <ul className="lista-simple">
         {lista?.map((p) => (
           <li key={p.id}>
             <div>
               <strong>{p.apodo}</strong>
-              <div className="suave">{fechaCorta(p.creada)}</div>
+              <div className="suave">{fechaCorta(p.creada)} · {p.distintos} {p.distintos === 1 ? "color" : "colores"}</div>
             </div>
-            <span>{p.distintos} {p.distintos === 1 ? "color" : "colores"}</span>
+            {confirmando === p.id ? (
+              <div className="acciones-fila">
+                <Boton variante="peligro" cargando={retirando === p.id} onClick={() => retirar(p)}>Sí, retirar</Boton>
+                <Boton variante="secundario" disabled={retirando === p.id} onClick={() => setConfirmando(null)}>No</Boton>
+              </div>
+            ) : (
+              <Boton variante="secundario" aria-label={`Retirar a ${p.apodo}`} onClick={() => setConfirmando(p.id)}>Retirar</Boton>
+            )}
           </li>
         ))}
       </ul>
+      {lista?.length > 0 && (
+        <p className="suave nota-retiro">Retirar saca a la persona del juego, cancela sus intercambios y anula sus premios pendientes. Puede volver a entrar con una partida nueva.</p>
+      )}
     </section>
   );
 }

@@ -167,3 +167,29 @@ test("api-staff: URL relativa a la página, CSRF solo en POST y errores del núc
   assert.equal(llamadas[3][1].headers["x-requested-with"], "fetch");
   assert.equal(llamadas[0][1].credentials, "same-origin");
 });
+
+// ───── 5.83: reinicio y retiro ─────
+import { textoReinicio as textoCliente } from "../src/lib/reinicio.js";
+import { textoReinicio as textoServidor } from "../../src/reinicio.js";
+import { MOTIVOS_ANULACION } from "../src/lib/mesero.js";
+import { MOTIVOS_ANULACION_PREMIO, MOTIVOS_CANCELACION } from "../../src/tipos.js";
+
+test("el texto del reinicio del jugador coincide con el del servidor", () => {
+  for (let dia = 0; dia < 7; dia++) {
+    for (const modo of ["nunca", "diario", "semanal"]) {
+      const r = { modo, hora: "06:30", diaSemana: dia, zona: "America/Lima" };
+      assert.equal(textoCliente(r), textoServidor(r), `${modo} ${dia}`);
+    }
+  }
+  assert.equal(textoCliente(undefined), null);
+});
+
+test("los motivos de anulación del mesero son exactamente los que acepta el servidor", () => {
+  assert.deepEqual(MOTIVOS_ANULACION.map(([id]) => id).sort(), [...MOTIVOS_ANULACION_PREMIO].sort());
+});
+
+test("todos los motivos de cancelación de un intercambio tienen texto propio", () => {
+  for (const m of MOTIVOS_CANCELACION) {
+    assert.notEqual(textoMotivo(m), textoMotivo("no-existe"), `falta texto para «${m}»`);
+  }
+});
